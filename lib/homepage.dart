@@ -30,6 +30,7 @@ class _HomePageState extends State<HomePage> {
 
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('@mipmap/ic_launcher');
+
     const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
     );
@@ -50,9 +51,9 @@ class _HomePageState extends State<HomePage> {
 
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
     AndroidNotificationDetails(
-      'task_channel_id',
-      'Task Notifications',
-      channelDescription: 'Thông báo nhắc nhở task',
+      'task_channel_id', // id kênh
+      'Task Notifications', // tên kênh
+      channelDescription: 'Thông báo nhắc nhở công việc',
       importance: Importance.max,
       priority: Priority.high,
     );
@@ -67,10 +68,8 @@ class _HomePageState extends State<HomePage> {
       'Công việc: ${task.title}',
       tzScheduledDateTime,
       platformChannelSpecifics,
-      androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation:
-      UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.dateAndTime,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
 
@@ -85,7 +84,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       tasks.removeAt(index);
     });
-    // Nếu muốn xóa luôn notification, cần thêm flutterLocalNotificationsPlugin.cancel(id);
+    // Nếu muốn hủy luôn notification, có thể dùng: flutterLocalNotificationsPlugin.cancel(id);
   }
 
   @override
