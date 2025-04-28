@@ -59,7 +59,7 @@ class _HomePageState extends State<HomePage> {
       body: tasks.isEmpty
           ? const Center(
         child: Text(
-          'No tasks yet.',
+          'Chưa có việc cần làm',
           style: TextStyle(fontSize: 18, color: Colors.grey),
         ),
       )
