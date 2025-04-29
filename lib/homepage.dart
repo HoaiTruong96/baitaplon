@@ -38,14 +38,14 @@ class _HomePageState extends State<HomePage> {
       tasks = loadedTasks;
     });
     for (var task in tasks) {
-      if (task.dueDateTime != null) {
+      if (task.dueDateTime != null && !task.isCompleted) {
         _scheduleNotification(task);
       }
     }
   }
 
   Future<void> _scheduleNotification(Task task) async {
-    if (task.dueDateTime == null) return;
+    if (task.dueDateTime == null || task.isCompleted) return;
     final scheduledDateTime = task.dueDateTime!.subtract(const Duration(minutes: 5));
     if (scheduledDateTime.isBefore(DateTime.now())) return;
     final tzScheduledDateTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
@@ -68,18 +68,22 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _addTask(Task task) async {
-    final id = await TaskDatabase().insertTask(task);
-    final newTask = Task(
-      id: id,
-      title: task.title,
-      description: task.description,
-      dueDateTime: task.dueDateTime,
+  void _editTask(Task task) async {
+    final updatedTask = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddTaskPage(existingTask: task),
+      ),
     );
-    setState(() {
-      tasks.add(newTask);
-    });
-    _scheduleNotification(newTask);
+    if (updatedTask != null) {
+      await TaskDatabase().updateTask(updatedTask);
+      setState(() {
+        tasks[tasks.indexWhere((t) => t.id == task.id)] = updatedTask;
+      });
+      if (updatedTask.dueDateTime != null && !updatedTask.isCompleted) {
+        _scheduleNotification(updatedTask);
+      }
+    }
   }
 
   void _deleteTask(int index) async {
@@ -111,6 +115,23 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _updateTaskStatus(Task task, bool isCompleted) async {
+    final updatedTask = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      dueDateTime: task.dueDateTime,
+      isCompleted: isCompleted,
+    );
+    await TaskDatabase().updateTask(updatedTask);
+    setState(() {
+      task.isCompleted = isCompleted;
+    });
+    if (isCompleted) {
+      await flutterLocalNotificationsPlugin.cancel(task.id!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -132,31 +153,58 @@ class _HomePageState extends State<HomePage> {
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             elevation: 4,
+            color: task.isCompleted ? Colors.grey[300] : Colors.lightBlue[50],
             child: ListTile(
-              contentPadding: const EdgeInsets.all(16),
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.title,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => _showTaskDetails(task),
-                    child: const Text('Chi tiết'),
-                  ),
-                ],
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              title: Text(
+                task.title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                ),
               ),
               subtitle: task.dueDateTime != null
-                  ? Text(
-                'Due: ${task.dueDateTime!.toLocal()}'.split('.')[0],
-                style: const TextStyle(color: Colors.blueGrey),
+                  ? Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Due: ${task.dueDateTime!.toLocal()}'.split('.')[0],
+                  style: const TextStyle(color: Colors.blueGrey),
+                ),
               )
                   : null,
-              trailing: IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => _deleteTask(index),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.info, color: Colors.blue),
+                    onPressed: () => _showTaskDetails(task),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Chi tiết',
+                  ),
+                  Checkbox(
+                    value: task.isCompleted,
+                    onChanged: (bool? value) {
+                      _updateTaskStatus(task, value ?? false);
+                    },
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.orange),
+                    onPressed: () => _editTask(task),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Chỉnh sửa',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteTask(index),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Xóa',
+                  ),
+                ],
               ),
             ),
           );
@@ -164,16 +212,23 @@ class _HomePageState extends State<HomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          final Task? newTask = await Navigator.push(
+          final newTask = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const AddTaskPage()),
           );
           if (newTask != null) {
-            _addTask(newTask);
+            await TaskDatabase().insertTask(newTask);
+            setState(() {
+              tasks.add(newTask);
+            });
+            if (newTask.dueDateTime != null && !newTask.isCompleted) {
+              _scheduleNotification(newTask);
+            }
           }
         },
         backgroundColor: Colors.blueAccent,
         child: const Icon(Icons.add),
+        tooltip: 'Thêm công việc mới',
       ),
     );
   }
