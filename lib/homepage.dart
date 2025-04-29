@@ -4,6 +4,8 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'Task.dart';
 import 'addtask_page.dart';
+import 'database_helper.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,7 +15,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  var tasks = <Task>[];
+  List<Task> tasks = [];
 
   late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
 
@@ -22,20 +24,29 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotification();
+    _loadTasks(); // Load từ database
   }
 
   void _initializeNotification() async {
-    // Khởi tạo timezone
     tz.initializeTimeZones();
 
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
 
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-    );
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
+  }
 
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  Future<void> _loadTasks() async {
+    final loadedTasks = await TaskDatabase().getTasks();
+    setState(() {
+      tasks = loadedTasks;
+    });
+
+    for (var task in tasks) {
+      if (task.dueDateTime != null) {
+        _scheduleNotification(task, task.id!);
+      }
+    }
   }
 
   Future<void> _scheduleNotification(Task task, int id) async {
@@ -44,47 +55,50 @@ class _HomePageState extends State<HomePage> {
     final scheduledDateTime = task.dueDateTime!.subtract(const Duration(minutes: 5));
     if (scheduledDateTime.isBefore(DateTime.now())) return;
 
-    final tz.TZDateTime tzScheduledDateTime = tz.TZDateTime.from(
-      scheduledDateTime,
-      tz.local,
-    );
+    final tzScheduledDateTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
 
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-    AndroidNotificationDetails(
-      'task_channel_id', // id kênh
-      'Task Notifications', // tên kênh
+    const androidDetails = AndroidNotificationDetails(
+      'task_channel_id',
+      'Task Notifications',
       channelDescription: 'Thông báo nhắc nhở công việc',
       importance: Importance.max,
       priority: Priority.high,
     );
 
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-    );
+    const platformDetails = NotificationDetails(android: androidDetails);
 
     await flutterLocalNotificationsPlugin.zonedSchedule(
       id,
       'Sắp tới hạn!',
       'Công việc: ${task.title}',
       tzScheduledDateTime,
-      platformChannelSpecifics,
-      matchDateTimeComponents: DateTimeComponents.dateAndTime,
+      platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
   }
 
-  void _addTask(Task task) {
+  void _addTask(Task task) async {
+    final id = await TaskDatabase().insertTask(task);
+    final newTask = Task(id: id, title: task.title, dueDateTime: task.dueDateTime);
+
     setState(() {
-      tasks.add(task);
+      tasks.add(newTask);
     });
-    _scheduleNotification(task, tasks.length); // ID = số lượng task
+
+    _scheduleNotification(newTask, id);
   }
 
-  void _deleteTask(int index) {
+  void _deleteTask(int index) async {
+    final task = tasks[index];
+    if (task.id != null) {
+      await TaskDatabase().deleteTask(task.id!);
+      await flutterLocalNotificationsPlugin.cancel(task.id!);
+    }
+
     setState(() {
       tasks.removeAt(index);
     });
-    // Nếu muốn hủy luôn notification, có thể dùng: flutterLocalNotificationsPlugin.cancel(id);
   }
 
   @override
