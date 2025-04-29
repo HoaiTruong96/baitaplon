@@ -15,7 +15,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<Task> tasks = [];
-
   late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
 
   @override
@@ -23,15 +22,13 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotification();
-    _loadTasks(); // Load tasks từ database
+    _loadTasks();
   }
 
   void _initializeNotification() async {
     tz.initializeTimeZones();
-
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
-
     await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
 
@@ -40,7 +37,6 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       tasks = loadedTasks;
     });
-
     for (var task in tasks) {
       if (task.dueDateTime != null) {
         _scheduleNotification(task);
@@ -50,12 +46,9 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _scheduleNotification(Task task) async {
     if (task.dueDateTime == null) return;
-
     final scheduledDateTime = task.dueDateTime!.subtract(const Duration(minutes: 5));
     if (scheduledDateTime.isBefore(DateTime.now())) return;
-
     final tzScheduledDateTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
-
     const androidDetails = AndroidNotificationDetails(
       'task_channel_id',
       'Task Notifications',
@@ -63,9 +56,7 @@ class _HomePageState extends State<HomePage> {
       importance: Importance.max,
       priority: Priority.high,
     );
-
     const platformDetails = NotificationDetails(android: androidDetails);
-
     await flutterLocalNotificationsPlugin.zonedSchedule(
       task.id!,
       'Sắp tới hạn!',
@@ -85,11 +76,9 @@ class _HomePageState extends State<HomePage> {
       description: task.description,
       dueDateTime: task.dueDateTime,
     );
-
     setState(() {
       tasks.add(newTask);
     });
-
     _scheduleNotification(newTask);
   }
 
@@ -99,10 +88,27 @@ class _HomePageState extends State<HomePage> {
       await TaskDatabase().deleteTask(task.id!);
       await flutterLocalNotificationsPlugin.cancel(task.id!);
     }
-
     setState(() {
       tasks.removeAt(index);
     });
+  }
+
+  void _showTaskDetails(Task task) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(task.title),
+          content: Text(task.description ?? 'Không có mô tả'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đóng'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -128,9 +134,19 @@ class _HomePageState extends State<HomePage> {
             elevation: 4,
             child: ListTile(
               contentPadding: const EdgeInsets.all(16),
-              title: Text(
-                task.title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => _showTaskDetails(task),
+                    child: const Text('Chi tiết'),
+                  ),
+                ],
               ),
               subtitle: task.dueDateTime != null
                   ? Text(
