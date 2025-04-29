@@ -132,83 +132,106 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Map<String, int> _countTaskStatus() {
+    int completed = tasks.where((t) => t.isCompleted).length;
+    int incomplete = tasks.length - completed;
+    return {
+      'completed': completed,
+      'incomplete': incomplete,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
+    final counts = _countTaskStatus();
     return Scaffold(
       appBar: AppBar(
         title: const Text('To-Do List'),
         backgroundColor: Colors.blueAccent,
       ),
-      body: tasks.isEmpty
-          ? const Center(
-        child: Text(
-          'Chưa có việc cần làm',
-          style: TextStyle(fontSize: 18, color: Colors.grey),
-        ),
-      )
-          : ListView.builder(
-        itemCount: tasks.length,
-        itemBuilder: (context, index) {
-          final task = tasks[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            elevation: 4,
-            color: task.isCompleted ? Colors.grey[300] : Colors.lightBlue[50],
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              title: Text(
-                task.title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-                ),
-              ),
-              subtitle: task.dueDateTime != null
-                  ? Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'Due: ${task.dueDateTime!.toLocal()}'.split('.')[0],
-                  style: const TextStyle(color: Colors.blueGrey),
-                ),
-              )
-                  : null,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.info, color: Colors.blue),
-                    onPressed: () => _showTaskDetails(task),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Chi tiết',
-                  ),
-                  Checkbox(
-                    value: task.isCompleted,
-                    onChanged: (bool? value) {
-                      _updateTaskStatus(task, value ?? false);
-                    },
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.orange),
-                    onPressed: () => _editTask(task),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Chỉnh sửa',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteTask(index),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Xóa',
-                  ),
-                ],
-              ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Text(
+              'Task đã hoàn thành: ${counts['completed']} | Task chưa hoàn thành: ${counts['incomplete']}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: tasks.isEmpty
+                ? const Center(
+              child: Text(
+                'Chưa có việc cần làm',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+            )
+                : ListView.builder(
+              itemCount: tasks.length,
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  elevation: 4,
+                  color: task.isCompleted ? Colors.grey[300] : Colors.lightBlue[50],
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    title: Text(
+                      task.title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    subtitle: task.dueDateTime != null
+                        ? Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Due: ${task.dueDateTime!.toLocal()}'.split('.')[0],
+                        style: const TextStyle(color: Colors.blueGrey),
+                      ),
+                    )
+                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.info, color: Colors.blue),
+                          onPressed: () => _showTaskDetails(task),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Chi tiết',
+                        ),
+                        Checkbox(
+                          value: task.isCompleted,
+                          onChanged: (bool? value) {
+                            _updateTaskStatus(task, value ?? false);
+                          },
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.orange),
+                          onPressed: () => _editTask(task),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Chỉnh sửa',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteTask(index),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Xóa',
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
