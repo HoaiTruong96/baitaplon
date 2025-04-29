@@ -4,6 +4,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'Task.dart';
 import 'addtask_page.dart';
+import 'database_helper.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,8 +14,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  var tasks = <Task>[];
-
+  List<Task> tasks = [];
   late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
 
   @override
@@ -22,124 +22,236 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotification();
+    _loadTasks();
   }
 
   void _initializeNotification() async {
-    // Khởi tạo timezone
     tz.initializeTimeZones();
-
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-    );
-
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
 
-  Future<void> _scheduleNotification(Task task, int id) async {
-    if (task.dueDateTime == null) return;
+  Future<void> _loadTasks() async {
+    final loadedTasks = await TaskDatabase().getTasks();
+    setState(() {
+      tasks = loadedTasks;
+    });
+    for (var task in tasks) {
+      if (task.dueDateTime != null && !task.isCompleted) {
+        _scheduleNotification(task);
+      }
+    }
+  }
 
+  Future<void> _scheduleNotification(Task task) async {
+    if (task.dueDateTime == null || task.isCompleted) return;
     final scheduledDateTime = task.dueDateTime!.subtract(const Duration(minutes: 5));
     if (scheduledDateTime.isBefore(DateTime.now())) return;
-
-    final tz.TZDateTime tzScheduledDateTime = tz.TZDateTime.from(
-      scheduledDateTime,
-      tz.local,
-    );
-
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-    AndroidNotificationDetails(
-      'task_channel_id', // id kênh
-      'Task Notifications', // tên kênh
+    final tzScheduledDateTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
+    const androidDetails = AndroidNotificationDetails(
+      'task_channel_id',
+      'Task Notifications',
       channelDescription: 'Thông báo nhắc nhở công việc',
       importance: Importance.max,
       priority: Priority.high,
     );
-
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-    );
-
+    const platformDetails = NotificationDetails(android: androidDetails);
     await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
+      task.id!,
       'Sắp tới hạn!',
       'Công việc: ${task.title}',
       tzScheduledDateTime,
-      platformChannelSpecifics,
-      matchDateTimeComponents: DateTimeComponents.dateAndTime,
+      platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
   }
 
-  void _addTask(Task task) {
-    setState(() {
-      tasks.add(task);
-    });
-    _scheduleNotification(task, tasks.length); // ID = số lượng task
+  void _editTask(Task task) async {
+    final updatedTask = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddTaskPage(existingTask: task),
+      ),
+    );
+    if (updatedTask != null) {
+      await TaskDatabase().updateTask(updatedTask);
+      setState(() {
+        tasks[tasks.indexWhere((t) => t.id == task.id)] = updatedTask;
+      });
+      if (updatedTask.dueDateTime != null && !updatedTask.isCompleted) {
+        _scheduleNotification(updatedTask);
+      }
+    }
   }
 
-  void _deleteTask(int index) {
+  void _deleteTask(int index) async {
+    final task = tasks[index];
+    if (task.id != null) {
+      await TaskDatabase().deleteTask(task.id!);
+      await flutterLocalNotificationsPlugin.cancel(task.id!);
+    }
     setState(() {
       tasks.removeAt(index);
     });
-    // Nếu muốn hủy luôn notification, có thể dùng: flutterLocalNotificationsPlugin.cancel(id);
+  }
+
+  void _showTaskDetails(Task task) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(task.title),
+          content: Text(task.description ?? 'Không có mô tả'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đóng'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _updateTaskStatus(Task task, bool isCompleted) async {
+    final updatedTask = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      dueDateTime: task.dueDateTime,
+      isCompleted: isCompleted,
+    );
+    await TaskDatabase().updateTask(updatedTask);
+    setState(() {
+      task.isCompleted = isCompleted;
+    });
+    if (isCompleted) {
+      await flutterLocalNotificationsPlugin.cancel(task.id!);
+    }
+  }
+
+  Map<String, int> _countTaskStatus() {
+    int completed = tasks.where((t) => t.isCompleted).length;
+    int incomplete = tasks.length - completed;
+    return {
+      'completed': completed,
+      'incomplete': incomplete,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
+    final counts = _countTaskStatus();
     return Scaffold(
       appBar: AppBar(
         title: const Text('To-Do List'),
         backgroundColor: Colors.blueAccent,
       ),
-      body: tasks.isEmpty
-          ? const Center(
-        child: Text(
-          'Chưa có việc cần làm',
-          style: TextStyle(fontSize: 18, color: Colors.grey),
-        ),
-      )
-          : ListView.builder(
-        itemCount: tasks.length,
-        itemBuilder: (context, index) {
-          final task = tasks[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            elevation: 4,
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(16),
-              title: Text(
-                task.title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              subtitle: task.dueDateTime != null
-                  ? Text(
-                'Due: ${task.dueDateTime!.toLocal()}'.split('.')[0],
-                style: const TextStyle(color: Colors.blueGrey),
-              )
-                  : null,
-              trailing: IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => _deleteTask(index),
-              ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Text(
+              'Task đã hoàn thành: ${counts['completed']} | Task chưa hoàn thành: ${counts['incomplete']}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: tasks.isEmpty
+                ? const Center(
+              child: Text(
+                'Chưa có việc cần làm',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+            )
+                : ListView.builder(
+              itemCount: tasks.length,
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  elevation: 4,
+                  color: task.isCompleted ? Colors.grey[300] : Colors.lightBlue[50],
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    title: Text(
+                      task.title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    subtitle: task.dueDateTime != null
+                        ? Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Due: ${task.dueDateTime!.toLocal()}'.split('.')[0],
+                        style: const TextStyle(color: Colors.blueGrey),
+                      ),
+                    )
+                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.info, color: Colors.blue),
+                          onPressed: () => _showTaskDetails(task),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Chi tiết',
+                        ),
+                        Checkbox(
+                          value: task.isCompleted,
+                          onChanged: (bool? value) {
+                            _updateTaskStatus(task, value ?? false);
+                          },
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.orange),
+                          onPressed: () => _editTask(task),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Chỉnh sửa',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteTask(index),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Xóa',
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          final Task? newTask = await Navigator.push(
+          final newTask = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const AddTaskPage()),
           );
           if (newTask != null) {
-            _addTask(newTask);
+            await TaskDatabase().insertTask(newTask);
+            setState(() {
+              tasks.add(newTask);
+            });
+            if (newTask.dueDateTime != null && !newTask.isCompleted) {
+              _scheduleNotification(newTask);
+            }
           }
         },
         backgroundColor: Colors.blueAccent,
         child: const Icon(Icons.add),
+        tooltip: 'Thêm công việc mới',
       ),
     );
   }
