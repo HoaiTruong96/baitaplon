@@ -10,6 +10,7 @@ class AddTaskPage extends StatefulWidget {
 
 class _AddTaskPageState extends State<AddTaskPage> {
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
   DateTime? _dueDateTime;
 
   @override
@@ -27,6 +28,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
               controller: _titleController,
               decoration: const InputDecoration(labelText: 'Tiêu đề công việc'),
             ),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(labelText: 'Mô tả công việc'),
+              maxLines: 3,
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
@@ -37,15 +43,32 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   lastDate: DateTime(2101),
                 );
 
-                if (pickedDate != null && pickedDate != _dueDateTime) {
-                  setState(() {
-                    _dueDateTime = pickedDate;
-                  });
+                if (pickedDate != null) {
+                  final TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now(),
+                  );
+
+                  if (pickedTime != null) {
+                    final combinedDateTime = DateTime(
+                      pickedDate.year,
+                      pickedDate.month,
+                      pickedDate.day,
+                      pickedTime.hour,
+                      pickedTime.minute,
+                    );
+
+                    setState(() {
+                      _dueDateTime = combinedDateTime;
+                    });
+                  }
                 }
               },
-              child: Text(_dueDateTime == null
-                  ? 'Chọn ngày hạn'
-                  : 'Ngày hạn: ${_dueDateTime?.toLocal()}'.split(' ')[0]),
+              child: Text(
+                _dueDateTime == null
+                    ? 'Chọn ngày & giờ hạn'
+                    : 'Hạn: ${_formatDateTime(_dueDateTime!)}',
+              ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -53,6 +76,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 if (_titleController.text.isNotEmpty && _dueDateTime != null) {
                   final newTask = Task(
                     title: _titleController.text,
+                    description: _descriptionController.text,
                     dueDateTime: _dueDateTime,
                   );
                   Navigator.pop(context, newTask); // Trả task về HomePage
@@ -64,5 +88,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
         ),
       ),
     );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year} '
+        '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

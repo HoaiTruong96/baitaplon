@@ -6,7 +6,6 @@ import 'Task.dart';
 import 'addtask_page.dart';
 import 'database_helper.dart';
 
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -24,7 +23,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotification();
-    _loadTasks(); // Load từ database
+    _loadTasks(); // Load tasks từ database
   }
 
   void _initializeNotification() async {
@@ -44,12 +43,12 @@ class _HomePageState extends State<HomePage> {
 
     for (var task in tasks) {
       if (task.dueDateTime != null) {
-        _scheduleNotification(task, task.id!);
+        _scheduleNotification(task);
       }
     }
   }
 
-  Future<void> _scheduleNotification(Task task, int id) async {
+  Future<void> _scheduleNotification(Task task) async {
     if (task.dueDateTime == null) return;
 
     final scheduledDateTime = task.dueDateTime!.subtract(const Duration(minutes: 5));
@@ -68,7 +67,7 @@ class _HomePageState extends State<HomePage> {
     const platformDetails = NotificationDetails(android: androidDetails);
 
     await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
+      task.id!,
       'Sắp tới hạn!',
       'Công việc: ${task.title}',
       tzScheduledDateTime,
@@ -80,13 +79,18 @@ class _HomePageState extends State<HomePage> {
 
   void _addTask(Task task) async {
     final id = await TaskDatabase().insertTask(task);
-    final newTask = Task(id: id, title: task.title, dueDateTime: task.dueDateTime);
+    final newTask = Task(
+      id: id,
+      title: task.title,
+      description: task.description,
+      dueDateTime: task.dueDateTime,
+    );
 
     setState(() {
       tasks.add(newTask);
     });
 
-    _scheduleNotification(newTask, id);
+    _scheduleNotification(newTask);
   }
 
   void _deleteTask(int index) async {

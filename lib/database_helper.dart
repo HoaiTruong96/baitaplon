@@ -21,15 +21,23 @@ class TaskDatabase {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,  // Tăng version để thực hiện thay đổi bảng
       onCreate: (db, version) async {
-        await db.execute('''
+        await db.execute(''' 
           CREATE TABLE tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
+            description TEXT,  // Thêm trường mô tả
             dueDateTime TEXT
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(''' 
+            ALTER TABLE tasks ADD COLUMN description TEXT;
+          ''' );
+        }
       },
     );
   }
@@ -50,3 +58,4 @@ class TaskDatabase {
     await db.delete('tasks', where: 'id = ?', whereArgs: [id]);
   }
 }
+
